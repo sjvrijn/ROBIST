@@ -154,7 +154,7 @@ class Robist:
             
             # check if stopping criteria has been met
             elapsed_time = time.time() - start_time
-            num_iterations = sum(v for k,v in num_iter.items())
+            num_iterations = sum(num_iter.values())
             if self._stopping_cond(stop_criteria, elapsed_time=elapsed_time, 
                                    num_iterations=num_iterations, 
                                    sol_info=[best_solution, desired_constr_cert_rhs]):
@@ -162,7 +162,7 @@ class Robist:
             count_iter += 1
             
             S_history.append(S_indices.copy())
-            if skip_solve == False:   
+            if not skip_solve:
                 # generate solution by solving sampled convex program for some set of scenarios S
                 if self.use_dual_sol:
                     x_i, obj_scp, duals_i = self.solve_SCP(S, **self.problem_instance)
@@ -201,13 +201,13 @@ class Robist:
                 
                 # update pareto frontier          
                 if self.eval_unc_constr is not None:
-                    non_dominated_solutions = self._update_non_dominated_solutions(non_dominated_solutions, x_i, obj_i, feas_certificates_test)
+                    non_dominated_solutions = self._update_non_dominated_solutions(non_dominated_solutions, obj_i, feas_certificates_test)
             
             # optional: print info each iteration
             if self.verbose:
                 print("-----------------")
                 print("iter     : " + f'{round(count_iter,0):.0f}')
-                if self.verbose and update_best_yn and skip_solve==False:
+                if self.verbose and update_best_yn and not skip_solve:
                     print("New best solution found!")
                 print("S_ind    : [", *S_indices, "]")
                 # print("S_vals   : [", *S, "]")
@@ -226,7 +226,7 @@ class Robist:
                 all_solutions.append({'sol': x_i, 'obj': obj_i, 'feas': feas_certificates_test})
             
             # given the training feasibility certificates, we now determine the next action
-            if self.use_tabu == True: 
+            if self.use_tabu:
                 tabu_add = self._get_tabu_add(S_indices, S_history)
                 tabu_remove = self._get_tabu_remove(S_indices, S_history)
             else:
@@ -242,7 +242,7 @@ class Robist:
             
             if add_or_remove is None:
                 break # signifies that no more actions are possible
-            elif add_or_remove == True:
+            elif add_or_remove:
                 if len(evals_train) > 1:
                     #TODO: add code to handle multiple uncertain functions
                     ...
@@ -250,7 +250,7 @@ class Robist:
                     S, S_indices = self._add_scenario(S, S_indices, possible_add_ind) 
                 skip_solve = False
                 num_iter['add'] += 1
-            elif add_or_remove == False:                
+            elif not add_or_remove:
                 if len(evals_train) > 1:
                     #TODO: add code to handle multiple uncertain functions
                     ...
@@ -258,7 +258,7 @@ class Robist:
                     S, S_indices, i_removal = self._remove_scenario(S, S_indices, possible_rem_ind)
                     if self.use_dual_sol:
                         # check if removed scenario has dual==0
-                        if duals_i[i_removal] > 0-self.numeric_precision and duals_i[i_removal] < 0+self.numeric_precision:
+                        if 0-self.numeric_precision < duals_i[i_removal] < 0+self.numeric_precision:
                             skip_solve = True
                             del duals_i[i_removal]
                         else:
@@ -365,23 +365,23 @@ class Robist:
                 best_is_feas = True
                 x_i_is_feas = True
             
-            if (best_is_feas==False and x_i_is_feas):
+            if not best_is_feas and x_i_is_feas:
                 best_solution = {'sol': x_i, 'obj': obj_i, 'feas': feas_certificates_test}
                 update_best_yn = True
-            elif (best_is_feas and x_i_is_feas):
-                if (obj_i < best_solution['obj']):
+            elif best_is_feas and x_i_is_feas:
+                if obj_i < best_solution['obj']:
                     best_solution = {'sol': x_i, 'obj': obj_i, 'feas': feas_certificates_test}
                     update_best_yn = True
-            elif (best_is_feas==False and x_i_is_feas==False):  
+            elif not (best_is_feas or x_i_is_feas):
                 max_gap_x_i = np.max(np.subtract(desired_constr_cert_rhs, feas_certificates_test))
                 max_gap_best = np.max(np.subtract(desired_constr_cert_rhs, best_solution['feas']))
-                if (max_gap_x_i < max_gap_best):
+                if max_gap_x_i < max_gap_best:
                     best_solution = {'sol': x_i, 'obj': obj_i, 'feas': feas_certificates_test}
                     update_best_yn = True
     
         return best_solution, update_best_yn
     
-    def _update_non_dominated_solutions(self, non_dominated_solutions, x_i, obj_i, feas_certificates_test):
+    def _update_non_dominated_solutions(self, non_dominated_solutions, obj_i, feas_certificates_test):
         x_i_pareto_eff_yn = True
         indices_to_be_removed = []
         for j,(obj, li_feas_cert) in enumerate(non_dominated_solutions):
@@ -443,10 +443,7 @@ class Robist:
         
         threshold = self._compute_prob_add(feas_certificates_train, desired_cert_rhs)
         draw = np.random.uniform()
-        if draw < threshold:
-            return True
-        else:
-            return False
+        return draw < threshold
     
     def _compute_prob_add(self, feas_certificates_train, desired_cert_rhs, method='deterministic_w_x%'):
         """
